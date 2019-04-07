@@ -1,0 +1,871 @@
+---
+title: 'Homework #1'
+author: "Aleksander Molak"
+date: "April 4, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+color = '#195e8c'
+color2 = '#d4ff00'
+```
+
+<br>
+
+## Import required libraries
+
+<br>
+
+```{r, message=F}
+library(foreign)    # read in SPSS craziness into eel-readable, sorry, R-readable format 
+library(ggplot2)    # get quality plots, baby! 
+library(dplyr)      # make your life easier :)
+library(QuantPsyc)  # get standardized coefficients!
+library(car)        # get vif to compute Variance Inflation Factor
+library(effects)
+library(rcompanion) # get R^2 for logit
+library(lmtest)
+library(vcd)
+library(xtable)
+library(pander)
+library(stargazer)
+```
+
+<br><br>
+
+## Load, transform and examine the data
+
+<br>
+
+```{r, message=F}
+# Set working dir.
+setwd('C:\\Users\\aleksander.molak\\Documents\\Personal\\Psych\\STATS_METHODS\\Hmwrk_1')
+
+# Import the data
+my_data <- read.spss("H1_dataset3.sav", to.data.frame=TRUE)
+
+# Set `gender` type to factor
+my_data$gender<-as.factor(my_data$gender)
+
+```
+
+<br>
+
+* #### View and examine the data
+
+<br>
+
+```{r}
+# Eyeball the dataset
+# View(my_data)
+
+# Look at some interesting variables
+my_data %>% count(behaviour)
+
+my_data %>% count(gender)
+
+```
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 1. Histogram: Identification with The Social Movement."}
+# Histogrm: ID with the socil mvmnt
+ggplot(my_data, aes(ID)) + geom_histogram(bins=7, fill=color, alpha=.7) + 
+                           xlab('Identification with the social movement') + 
+                           ylab('Count') + 
+                           theme_minimal()
+```
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 2. Histogram: System Justification."}
+# Histogrm: System Justification
+ggplot(my_data, aes(SJ)) + geom_histogram(bins=7, fill=color, alpha=.7) + 
+                           xlab('System Justification') + 
+                           ylab('Count') + 
+                           theme_minimal()
+```
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 3. Histogram: Number of Pro-LGBT Activists a Respondent Knows."}
+# Histogrm: Number of Pro-LGBT Activists a Respondent Knows
+ggplot(my_data, aes(EMB1)) + geom_histogram(bins=5, fill=color, alpha=.7) + 
+                             xlab('# of Pro-LGBT Activists Known') + 
+                             ylab('Count') + 
+                             theme_minimal()
+```
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 4. Histogram: Intentions to Engage in Collective Action."}
+# Histogrm: Intentions to Engage in Collective Action
+ggplot(my_data, aes(CA)) + geom_histogram(bins=7, fill=color, alpha=.7) + 
+                           xlab('Intentions to Eng. in Coll. Act.') + 
+                           ylab('Count') + 
+                           theme_minimal()
+```
+
+<br><br>
+
+## Modelling 1: Linear Regression
+
+<br>
+
+### Inspect the data. 
+
+<br>
+
+* ##### Are the relationships between collective action and its two potential predictors – system justification and identification with the social movement – linear? Provide scatterplots.
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 5. Relationship between System Justification and Collective Action."}
+ggplot(my_data, aes(SJ, CA)) + geom_point(color=color, alpha=.2) + 
+                               xlab('System Justification') + 
+                               ylab('Collective Action') + 
+                               theme_minimal()
+```
+
+<br>
+
+Based on the scatterplot, relationship between System Justification ($SJ$) and Collective Action ($CA$) does not look linear. Let's fit local regression line using locally estimated scatterplot smoothing (loess) method to make sure if that's the case.
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 6. Relationship between System Justification and Collective Action with added LOESS regression line."}
+ggplot(my_data, aes(SJ, CA)) + geom_point(color=color, alpha=.2) + 
+                               xlab('System Justification') + 
+                               ylab('Collective Action') + 
+                               geom_smooth(color=color2, method='loess') + 
+                               theme_minimal()
+```
+
+<br>
+
+Loess line shows non-linear relationship. The relationship is neither linear nor perfectly quadratic. Nonetheless, based on visual inspection we can assume that adding linear and quadratic predictors to the model ($I(SJ^2)$) could model this relationship well. It's also worth noticing that confidence intervals for high values of $SJ$ are broad and therefore the relationship between variables in this area of the scatterplot is not strongly unequivocal. This said, we can still expect that this data can be modelled successfully using linear model as the relationship for $SJ$ values between $1$ and $4$ is almost linear.
+
+
+Let's now examine realtionship between Identification with Social Movement ($ID$) and Collective Action ($CA$):
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 7. Relationship between Identification with Social Movement and Collective Action."}
+ggplot(my_data, aes(ID, CA)) + geom_point(color=color, alpha=.2) + 
+                               xlab('Id. with Soc. Mov.') + 
+                               ylab('Collective Action') + 
+                               geom_smooth(color=color2, method='loess') + 
+                               theme_minimal()
+```
+
+<br>
+
+The above relationship is almost perfectly linear. It is positive, which means that the stronger our participants identify themselves with social movement, the stronger are their intentions for collective action. 
+
+
+How about number of known activists ($EMB1$)?
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 8. Relationship between Number of Known Pro-LGBT Activists and Collective Action."}
+ggplot(my_data, aes(EMB1, CA)) + geom_point(color=color, alpha=.2) + 
+                                 xlab('# of Known Pro-LGBT Activists') + 
+                                 ylab('Collective Action') + 
+                                 geom_smooth(color=color2, method='loess') + 
+                                 theme_minimal()
+```
+
+<br>
+
+This relationship also looks nicely linear! The more pro-LGBT activists our participants know, the stronger are their intentions for collective action.
+
+<br><br>
+
+### Regress collective action intentions on system justification (Model 1). 
+
+<br>
+
+```{r}
+# Build a model
+model_1 <- lm(CA ~ SJ, my_data)
+```
+
+<br>
+
+* ##### How much DV’s variance is explained by this model? 
+
+<br>
+
+```{r}
+summary(model_1)
+```
+<br>
+
+$R^2$ for this model equals $0.1253$, which means that model explains $12.53$% of variance. 
+We can use $R^2$ here and not $R^2_{adj}$, because we have a model with just one predictor and therefore we don't need to adjust for inflated $R^2$ caused by adding more predictors to the model.
+
+
+<br>
+
+* ##### Does the model fit data well, as expressed in its F statistic? 
+
+<br>
+
+$F(1, 291) = 41.69, p<.00001$. Based on $F$ statistic we can say that at least one of predictors is related to $DV$ (at least one predictor's coefficient is different from zero) (Hastie et al., 2009). In our case (model with just one predictor) $F$ statistic only confirms what we already knew based on $t$ statistic and its $p-value$: $SJ$ is significantly related to $CA$.
+
+<br>
+
+* ##### Is system justification a significant predictor of the DV? 
+
+<br>
+
+Yes, it is. We can say this based on on $t$ statistic and its $p-value$.
+
+<br><br>
+
+* ##### Report the unstandardized and the standardized coefficient for system justification, a 95% CI for the unstandardized coefficient and a p-value. 
+
+<br>
+
+```{r}
+# Unstandardized coefficients
+coef(model_1)
+
+# Standardized coefficients
+lm.beta(model_1)
+
+# Conf int
+confint(model_1)
+```
+
+<br>
+
+System justification significantly predicted intentions for taking collective action ($CA$), $b = -.74$, $95$% $CI$ $[-.96, -.52]$, $\beta = -.35$, $p=.01$. 
+
+<br>
+
+* ##### How may you interpret the relationship between the DV and its predictor?
+
+<br>
+
+Based on standardized coefficients we can say that moving one standard deviation up in $SJ$ is related to $-.35$ standard deviation drop in $CA$. 
+
+Based on unstandardized coefficients we can express the relationship as follows: increase of one unit of System Justification is related to the drop of $-.35$ units of Collective Action.
+
+<br><br>
+
+### Add identification with the social movement as an explanatory variable (Model 2).
+
+<br>
+
+```{r}
+model_2 <- lm(CA ~ SJ + ID, my_data)
+```
+
+<br>
+
+* ##### What is the relationship between collective action intentions and identification with the social movement? 
+
+<br>
+
+```{r}
+summary(model_2)
+```
+
+<br>
+
+* ##### What happened to the system justification coefficient? How do you interpret this change? 
+
+<br>
+
+```{r}
+coef(model_1)
+coef(model_2)
+```
+<br>
+
+Coefficient for $SJ$ has shrunk. This is probably due to the fact that $SJ$ and our new predictor $ID$ are correlated. Let's check it:
+
+```{r}
+cor.test(my_data$SJ, my_data$ID)
+```
+
+<br>
+
+Indeed, both variables are correlated. Another reason may be that $ID$ has bigger variance than $SJ$. Let's examine this:
+
+```{r}
+var(my_data$SJ)
+var(my_data$ID)
+```
+
+<br>
+
+In fact, that's the case. We can say that in our model $ID$ is a *stronger* predictor of $CA$ than $SJ$.
+
+<br>
+
+* ##### Report unstandardized and standardized coefficients, 95% confidence intervals, p-values, F-statistic for Model 2 and $R^2$. 
+
+<br>
+
+```{r}
+# Unstandardized coefficients
+coef(model_2)
+
+# Standardized coefficients
+lm.beta(model_2)
+
+# Unstndrd. conf. int. 
+confint(model_2)
+
+```
+
+<br> 
+
+System justification significantly predicted intentions for taking collective action ($CA$), $b = -.15$, $95$% $CI$ $[-.27, -.02]$, $\beta = -.07$, $p=.02$. 
+
+Identification with social movement was even stronger predictor of $CA$, $b = .8$, $95$% $CI$ $[.74, .86]$, $\beta = .84$, $p<.001$.
+
+Model explained a significant proportion of variance in intentions for taking collective action, $R^2_{adj} = .75$, $F(2, 290) = 42.64$, $p < .001$.
+
+<br><br>
+
+* ##### Compare the fit of Models 1 and 2.
+
+```{r}
+anova(model_1, model_2)
+```
+
+<br>
+
+According to ANOVA results `model_2` performed better resulting in lower `RSS` (residual sum of squares, namely error) and therefore better fit to the data. 
+
+The difference between models is significant, $F(1, 290) = 738.73$, $p<.0001$.
+
+
+<br><br>
+
+### Add gender as another explanatory variable (Model 3). 
+
+<br>
+
+```{r}
+model_3 <- lm(CA ~ SJ + ID + gender, my_data)
+```
+
+<br><br>
+
+* ##### Report unstandardized and standardized coefficients, 95% confidence intervals, p-values, F-statistic for Model 3 and $R^2$. 
+
+<br>
+
+```{r}
+# To get std coefs we need to recode gender from factor to numeric
+my_data$gender_recode <- as.numeric(my_data$gender) - 1
+```
+
+```{r}
+# Let's now refit the model
+model_3a <- lm(CA ~ SJ + ID + gender_recode, my_data)
+
+# And - as a sanity check - let's see if the model is identical to the one before recoding:
+anova(model_3, model_3a)
+```
+
+<br>
+
+Models seem to be identical. Great!
+
+<br>
+
+
+```{r}
+summary(model_3a)
+
+# Get conf. int.
+confint(model_3a)
+
+# Get stndrd. coef
+lm.beta(model_3a)
+```
+
+<br>
+
+System justification significantly predicted intentions for taking collective action ($CA$), $b = -.13$, $95$% $CI$ $[-.26, -.004]$, $\beta = -.06$, $p=.04$. 
+
+Identification with social movement was even stronger predictor of $CA$, $b = .8$, $95$% $CI$ $[.74, .85]$, $\beta = .84$, $p<.001$.
+
+Gender significantly predicted $CA$, $b = -.32$, $95$% $CI$ $[-.56, -.07]$, $\beta = -.07$, $p=.01$.
+
+Model explained a significant proportion of variance in intentions for taking collective action, $R^2_{adj} = .76$, $F(3, 303) = 42.64$, $p < .001$.
+
+<br>
+
+* ##### Compare the fit of Models 2 and 3. 
+
+<br>
+
+```{r}
+anova(model_2, model_3a)
+```
+
+<br>
+
+According to the results of ANOVA, `model_3a` outperforms `model_2`, $F(1, 289) = 6.39$, $p=.01$.
+
+Nonetheless, we see that according to $F$ statistic value the difference between `model_2` and `model_3a` is much smaller than the difference between `model_1` and `model_2` ($F(1, 290) = 738.73$, $p<.0001$).
+
+<br>
+
+* ##### After accounting for system justification and identification with the social movement, do men and women differ in terms of collective action intentions? If yes, how can you interpret this relationship?
+
+<br>
+
+Yes. Althought effect of gender is small. Being a man is related to being $.07$ standard deviation lower on collective action intention than being a woman.
+
+<br>
+
+* ##### Provide the plots presenting the effects of all predictors.
+
+<br> 
+
+```{r, fig.align="center", fig.cap="Figure 9. Relationship between System Justification and Collective Action with linear fit."}
+ggplot(my_data, aes(SJ, CA)) + geom_point(color=color, alpha=.2) + 
+                                 xlab('System Justification') + 
+                                 ylab('Collective Action') + 
+                                 geom_smooth(color=color2, method='lm') + 
+                                 theme_minimal()
+```
+
+```{r, fig.align="center", fig.cap="Figure 10. Relationship between Identification with Social Movement and Collective Action with linear fit."}
+ggplot(my_data, aes(ID, CA)) + geom_point(color=color, alpha=.2) + 
+                                 xlab('Id. with Soc. Mvmnt') + 
+                                 ylab('Collective Action') + 
+                                 geom_smooth(color=color2, method='lm') + 
+                                 theme_minimal()
+```
+
+
+```{r, fig.align="center", fig.cap="Figure 11. Relationship between Gender and Collective Action with linear fit."}
+ggplot(my_data, aes(gender_recode, CA)) + geom_point(color=color, alpha=.2) + 
+                                 xlab('Gender (male=1)') + 
+                                 ylab('Collective Action') + 
+                                 geom_smooth(color=color2, method='lm') + 
+                                 theme_minimal()
+```
+
+<br><br>
+
+### Diagnose Model 3. Using appropriate statistics:
+
+<br>
+
+* ##### Check if the model suffers from multicollinearity
+
+<br>
+
+```{r}
+vif(model_3a)
+```
+
+
+Values of variance inflation factor are low (<<10) in `model_3a`. Also $\mu(VIF)<5$.
+
+Model does not suffer from multicollinearity.
+
+<br>
+
+* ##### Check if the independence condition is met
+
+<br>
+
+```{r}
+durbinWatsonTest(model_3a)
+```
+
+<br>
+
+$D-W$ statistic is significant ($p\approx 0$). This suggests that errors in `model_3a` are autocorrelated at lag 1 and therefore the assumption of independence is not met.
+
+
+Nonetheless Field (2009) suggests that values under 1 or more than 3 are a cause for concern. According to his criteria `model_3a` does not violate assumption of independence as $D-W = 1.58$.
+
+<br>
+
+* ##### Check if the proportion of large standardized residuals (>2) is acceptable
+
+<br>
+
+```{r}
+# Get std residuals
+std_res <- rstandard(model_3a)
+
+# Compute freq
+hi_std_res <- std_res > 2 | std_res < -2
+
+sum(hi_std_res) / length(std_res)
+```
+
+<br>
+
+There's $7.5$% of large standardized residuals, which exceeds the conventional threshold of $5$%.
+
+<br>
+
+* ##### Check if there are any influential observations, as suggested by Cook’s distance
+
+<br>
+
+```{r}
+# Save Cook's distances 
+cooks <- cooks.distance(model_3a)
+
+# Compute frequency of Cook's dist.
+sum(cooks>1)
+```
+
+<br>
+
+As propsed by Cook and Weisberg (1982) influeantial observations should have $D_i > 1$. There are no such observations in `model_3a`. 
+
+Based on this observation we can say that there are no influential cases in `model_3a`.
+
+<br>
+
+* ##### Check if the model is correctly specified based on residuals’ plots
+
+<br>
+
+```{r}
+residualPlots(model_3a)
+```
+
+<br>
+
+Above plots may suggest non-linearity in the data, yet it seems not very strong. 
+
+Adding non-linear data transformation could improve model fit.
+
+<br>
+
+### Report the results of Models 1-3 in a tabular form in accordance with APA guidelines (Table 5.12, p. 144).
+
+<br>
+<br>
+
+```{r, results='asis'}
+stargazer(model_1, model_2, model_3a, 
+          header=FALSE, 
+          type='html', 
+          align=TRUE, 
+          title="Table 1. Comparison of models (Model 1, Model 2, Model 3)",
+          covariate.labels=c("System Justification", "Identification w/ Social Movement", "Gender"),
+          dep.var.labels="Collective Action")
+
+```
+
+<br>
+
+### The residualPlots() function produces the results of Tukey test.
+
+<br>
+
+* ##### What is the H0 specific to this test? 
+
+<br>
+
+$H_0$ for this test says that coefficient of quadratic term added to the model equals $0$.
+
+In other words, model is additive.
+
+<br>
+
+* ##### What does the result obtained for Model 3 tell us?
+
+<br>
+
+The result obtained for `model_3a` ($p<.001$) tells us that quadratic term for $ID$ is not equal to $0$ and model is not strictly additive (Tukey test significant, $p\approx 0$).
+
+<br>
+
+* ##### Does changing the model in accordance with Tukey test improve the fit? (hint: if you want to add a quadratic term for variable x to regression model, you can do it by adding I(x^2) to regression equation code). 
+
+<br>
+
+```{r}
+model_4 <- lm(CA ~ SJ + ID + gender_recode + I(ID^2), my_data)
+```
+
+```{r}
+residualPlots(model_4)
+```
+
+<br>
+
+Adding a quadratic transformation of $ID$ improves the fit. 
+
+Tukey's test becomes insignificant, suggesting good fit of the model.
+
+<br>
+
+* ##### What does the new model tell us about the relationships between predictors and the DV?
+
+<br>
+
+It tells us that identification with social movement has non-linear relationship with $CA$. 
+
+<br>
+<br>
+
+## Modelling 2: Logistic Regression
+
+<br>
+
+### Now, let’s move to explaining respondents’ actual participation. 
+
+<br>
+
+* ##### Regress participation on system justification (Model 1). 
+
+<br>
+
+```{r}
+# Recode `behaviour` to 1s and 0s
+my_data$behav_recode <- as.numeric(my_data$behaviour) - 1
+```
+
+
+```{r}
+logreg_1 <- glm(behav_recode ~ SJ, my_data, family='binomial')
+``` 
+
+<br>
+
+* ##### Provide confidence intervals, system justification odds ratio and confidence intervals for odds ratio. 
+
+<br>
+
+```{r}
+# Summary
+summary(logreg_1)
+
+# Conf ints
+confint(logreg_1)
+
+# Get odds ratios
+exp(logreg_1$coefficients) 
+```
+
+<br>
+
+* ##### Interpret the odds ratio. 
+
+<br>
+
+Odds ratio of $.59$ means that $SJ$ is related to decreased probability of participation in Equality Parade. According to McHugh (2009) odds ratios $<1$ are not directly interpretable.
+
+<br>
+
+
+* ##### Is this model better than the null model? 
+
+```{r}
+lrtest(logreg_1)
+```
+
+
+<br>
+
+Yes.
+
+<br>
+
+* ##### How do you know it? 
+
+<br>
+
+Deviance of `logreg_1` ($D=365.8$) is lower than null model's deviance ($D=384.62$). 
+
+This difference is significant, $p<.001$
+
+<br>
+
+* ##### Provide pseudo-R2 for this model.
+
+<br>
+
+```{r}
+nagelkerke(logreg_1)
+```
+
+<br>
+
+Nagelkerke's $pseudo-R^2$ equals $.085$
+
+<br>
+
+* ##### Visualise the relationship between system justification and the probability of participation.
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 12. Relationship between System Justification and Probability of Participation in Equality Parade."}
+my_data %>%
+  ggplot(aes(SJ, behav_recode)) +
+  geom_point(alpha = .2, color=color) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), color=color2) +
+  xlab("System Justification") +
+  ylab("Probability of Participation")
+```
+
+
+<br>
+
+### Add identification with the social movement and gender as the predictors (Model 2).
+
+<br>
+
+```{r}
+logreg_2 <- glm(behav_recode ~ SJ + ID + gender_recode, my_data, family='binomial')
+```
+
+<br>
+
+* ##### Does this model fit data better than Model 1? Provide the appropriate statistic and pvalue.
+
+```{r}
+lrtest(logreg_1, logreg_2)
+
+```
+
+
+<br>
+
+`logreg_2` fits data better than `logreg_1`. 
+
+Model 2 (`logreg_2`) has lower deviance ($D=162.66$) than `logreg_1` ($D=365.8$) and this difference is significant at $p<.001$.
+
+<br>
+
+* ##### Provide confidence intervals, odds ratios and confidence intervals for odds ratios for the regression coefficients. 
+
+<br>
+
+```{r}
+# Conf int
+confint(logreg_2)
+
+# Odds ratio
+exp(logreg_2$coefficients) 
+
+# Conf ints for OR
+exp(confint(logreg_2))
+```
+
+<br>
+
+* ##### Interpret the odds ratios.
+
+<br>
+
+With increase of one unit in $SJ$ odds to participate in Equality Parade increase by a factor of $1.03$.
+
+With increase of one unit in $ID$ odds to participate in Equality Parade increase by a factor of $3.604$.
+
+There are higher odds that women will be participants in Equality Parade than men. 
+
+
+<br>
+
+### Based on Model 2, what is the probability of participation for:
+
+<br>
+
+* ##### a woman (gender = “female”) whose system justification = 7 and identification with the social movement = 1?
+
+<br>
+
+```{r}
+predict(logreg_2, data.frame(SJ = 7, ID = 1, gender_recode=0), type='response')
+```
+
+<br>
+
+* ##### a woman (gender = “female”) whose system justification = 3 and identification with the social movement = 4?
+
+<br>
+
+```{r}
+predict(logreg_2, data.frame(SJ = 3, ID = 4, gender_recode=0), type='response')
+```
+
+<br><br>
+
+
+## Modelling 3: Poisson Regression
+
+<br>
+
+### visualise the distribution of EMB1. 
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 13. Histogram: # of Known LGBT Activists."}
+# Histogrm: System Justification
+ggplot(my_data, aes(EMB1)) + geom_histogram(bins=5, fill=color, alpha=.7) + 
+                           xlab('# of Known LGBT Activists') + 
+                           ylab('Count') + 
+                           theme_minimal()
+
+```
+
+<br>
+
+* ##### Is it consistent with Poisson distribution? Perform an appropriate test. 
+
+<br>
+
+```{r}
+gf = goodfit(my_data$EMB1,type= "poisson",method= "ML")
+plot(gf,main="Count data vs Poisson distribution")
+summary(gf)
+```
+
+<br>
+
+Low p-value ($p\approx 0$) suggests that the distribution of $EMB1$ does not follow Poisson distribution.
+
+<br>
+
+* ##### If the distribution of EMB1 is consistent with Poisson distribution, regress it on system justification, identification with the social movement and gender. 
+
+<br>
+
+* ##### Is the number of known activists related to any of these variables? 
+
+<br>
+
+* ##### Provide the R2 for this model. 
+
+<br>
+
+* ##### If the distribution of EMB1 is not consistent with Poisson distribution, do not perform any regression model
+
+<br>
+
+<br><br>
+
+
+## References
+
+* Cook, R. D., Weisberg, S. (1982). Residuals and Influence in Regression. New York: Chapman & Hall.
+
+* Field, A.P. (2009). Discovering statistics using SPSS: and sex and drugs and rock ‘n’ roll (3rd edition). London: Sage.
+
+* Hastie, T., Tibshirani, R., & Friedman, J. H. (2009). The elements of statistical learning: data mining, inference, and prediction. 2nd ed. New York: Springer.
+
+* McHugh, M. L. (2009). The odds ratio: calculation, usage and interpretation. Lessons in biostatistics 19(2).
+
