@@ -1,0 +1,1326 @@
+---
+title: 'Homework #3'
+author: "Aleksander Molak"
+date: "May 1, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+color = '#195e8c'
+color2 = '#d4ff00'
+color3 = '#92c1cc'
+color4 = '#ffbf00'
+
+# Set path
+path <- 'C:\\Users\\aleksander.molak\\Documents\\Personal\\Psych\\STATS_METHODS\\Hmwrk_3'
+```
+
+<br>
+
+## Import required libraries
+
+<br>
+
+```{r, message=F}
+library(foreign)    # read in SPSS craziness into eel-readable, sorry, R-readable format 
+
+library(nlme)       # MLM 
+library(lme4)       # MLM
+library(lmtest)     # Compare models using likelihood ratio test
+
+library(ggplot2)    # get quality plots, baby! 
+library(sjPlot)     # Plot variability in intercepts and slopes easily
+library(lattice)    # xyplot()
+
+library(dplyr)      # make your life easier :)
+library(QuantPsyc)  # get standardized coefficients!
+library(effects)
+library(vcd)
+library(car)        # logit()
+
+```
+<br>
+
+___________________________
+
+<br><br>
+
+# Part 1
+
+<br><br>
+
+Data file: time.sav
+
+<br>
+
+In the first part of Homework 3 you are going to analyse data from a study of wives from 50 heterosexual married couples. Study participants were randomly assigned to a 16-week marital therapy treatment condition (n = 50) or a 16-week waiting-list condition (n = 25). In both groups participants completed a web diary including the measure of
+relationship intimacy once a week.
+
+The data set you received has a long format (which means that you do not have to transform it) and includes the following variables:
+
+* **id**: level-2 variable; participant’s identifier (1-50)
+
+* **time**: level-1 variable; time index, takes values from 0 to 15
+
+* **intimacy**: level-1 variable; perceived level of intimacy in the relationship (takes values from 0 to 10)
+
+* **treatment**: level-2 variable; study condition; 0 = waiting list, 1 = treatment group
+
+<br>
+
+## Load, transform and examine the data
+
+<br>
+
+```{r, message=F}
+# Set working dir.
+setwd(path)
+
+# Import the data
+data_1 <- read.spss("time.sav", to.data.frame=TRUE)
+
+# Check for NAs
+sum(is.na(data_1))
+
+```
+
+<br>
+
+No NAs in the dataset. Hurray! :)
+
+<br>
+
+## Visualize the raw data (4 points)
+
+<br>
+
+* #### Let’s start with visualizing raw data. Create two plots with time as the x variable and intimacy as the y variable.
+
+<br>
+
+* #### a.) In the first plot show the raw results for each study participant and connect them with lines
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 1. Intimacy level per participant vs time vs treatment (0 = no treatment; 1 = treatment)"}
+
+ggplot(data_1, aes(x = time, y = intimacy, group = id, colour = factor(treatment))) + 
+                            geom_point(color = color, alpha = .3) + 
+                            geom_line(size = 4, alpha = .15) +
+                            labs(x = "Time", y = "Intimacy", colour = "Treatment") +
+                            theme_minimal() +
+                            scale_color_manual(values=c(color, color4)) 
+          
+```
+
+
+<br>
+
+* #### b) Create a spaghetti plot showing regression lines estimated for each person independently (use geom_smooth() function but do not facet_wrap() function)
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 2. Linear regression lines for intimacy level per participant per timepoint. Colours signify treatment (0 = no treatment; 1 = treatment)"}
+
+ggplot(data_1, aes(x = time, y = intimacy, group = id, colour = factor(treatment))) + 
+                            geom_point(color = color, alpha = .1) + 
+                            geom_line(stat = "smooth", method = lm, size = 4, alpha = .15) +
+                            labs(x = "Time", y = "Intimacy", colour = "Treatment") +
+                            theme_minimal() +
+                            scale_color_manual(values=c(color, color4))
+                            
+          
+```
+
+<br><br>
+
+
+## Null model (4 points)
+
+<br>
+
+* #### Fit a null model with intimacy as the DV and respond the following questions:
+
+<br>
+
+```{r}
+
+# Null model
+model_0 <- lme(fixed = intimacy ~ 1, random = ~1|id, data = data_1)
+
+# Summarize `model_0`
+summary_0 <- summary(model_0) 
+summary_0
+
+```
+
+
+<br>
+
+* #### a) Provide the estimate, SE and p-value for intercept. How can you interpret this value?
+
+<br>
+
+```{r}
+cat("Estimate:", summary_0$tTable[, "Value"])
+
+cat("SE:", summary_0$tTable[, "Std.Error"])
+
+cat("p-value:", summary_0$tTable[, "p-value"])
+
+```
+
+<br>
+
+Intercept value $3.47$ means that the mean value of `intimacy` in the sample equals to $3.47$.
+
+<br>
+
+* #### b) What amount of variability in intimacy may be attributed to interindividual factors (in other words, what is the value of ICC)?
+
+<br>
+
+```{r}
+# Get variances 
+vc_0 <- as.numeric(VarCorr(model_0))
+
+# Compute ICC
+icc_0 <- vc_0[1] / (vc_0[1] + vc_0[2])
+
+# Print out
+cat("ICC =", icc_0)
+
+```
+
+<br>
+
+## Model with fixed time predictor (5 points)
+
+<br>
+
+* #### Fit a model with time as a fixed level-1 predictor and respond the following questions.
+
+<br>
+
+```{r}
+
+# Model with fixed level-1 predictor
+model_1 <- lme(fixed = intimacy ~ time, random = ~1|id, data = data_1)
+
+
+# Summarize `model_1`
+summary_1 <- summary(model_1) 
+summary_1
+
+```
+
+<br>
+
+* #### a) Is this model better than the null model? Provide the results of an appropriate test
+
+<br>
+
+```{r}
+lrtest(model_0, model_1)
+
+```
+
+<br>
+
+According to likelihood ratio test `model_1` is better than `model_0`. Deviance difference between `model_0` and `model_1` equals to $47.77$ and is significant at $p<.001$.
+
+<br>
+
+* #### b) What is the value of the intercept? How would you interpret it?
+
+<br>
+
+```{r}
+cat("Estimate:", summary_1$tTable[1, "Value"])
+
+```
+
+<br>
+
+Value of the intercept equals to $2.87$. It can be interpreted as a mean level of intimacy at time $0$.
+
+<br>
+
+* #### c) Is the effect of time significant? If so, how would you interpret its value?
+
+<br>
+
+```{r}
+# Check significance
+summary_1$tTable["time", "p-value"] < .001
+
+```
+
+<br>
+
+Yes, it is significant at $p < .001$. It can be interpreted as expected increase in `intimacy` due to increment of one unit in `time`.
+
+<br>
+
+## Model with random time predictor (7 points)
+
+<br>
+
+* #### Fit a model with time as a random level-1 predictor and respond the following questions.
+
+<br>
+
+```{r}
+
+# Model with time as random level-1 predictor
+model_2 <- lme(fixed = intimacy ~ time, random = ~time | id, data = data_1)
+
+
+# Summarize `model_2`
+summary_2 <- summary(model_2) 
+summary_2
+
+```
+
+<br> 
+
+* #### a) Is this model better than the model with time as a fixed predictor? Provide the results of an appropriate test.
+
+<br>
+
+```{r}
+lrtest(model_1, model_2)
+
+```
+
+<br>
+
+According to likelihood ratio test `model_2` is better than `model_1`. Deviance difference between `model_1` and `model_2` equals to $39.34$ and is significant at $p<.001$.
+
+<br>
+
+* #### b) What is the value of the time slope? How would you interpret it?
+
+<br>
+
+```{r}
+# Get time slope value
+summary_1$tTable[2, 1]
+
+```
+
+<br>
+
+The value of `time` slope equals to $0.80$. We can understand it as the expected increase in `intimacy` due to 1 unit increment in `time`.
+
+<br>
+
+* #### c) Is the variability in time slopes between study subjects statistically significant? 
+
+<br>
+
+```{r}
+intervals(model_2, which = 'var-cov')
+
+```
+
+<br>
+
+Yes.
+
+<br>
+
+* #### How do you know it? 
+
+<br>
+
+$95$% confidence interval for $\sqrt{\tau_{11}}$ does not contain $0$.
+
+
+<br>
+
+
+* #### Provide and interpret 95% PVI for time slopes
+
+<br>
+
+```{r}
+# Get std of random slope
+std_r_slope <- 0.0954216
+
+
+# Compute PVIs
+
+m_2_pvi <- std_r_slope * 1.96
+
+m_2_beta_10 <- 0.0797279
+
+m_2_upper_bound_pvi <- m_2_beta_10 + m_2_pvi
+m_2_lower_bound_pvi <- m_2_beta_10 - m_2_pvi
+
+cat("PVI for time slopes:", m_2_lower_bound_pvi, m_2_upper_bound_pvi)
+
+```
+
+<br>
+
+$95$% of random `time` slopes should take values between $-.11$ and $.27$
+
+<br>
+
+* #### d) Create a model-based spaghetti plot showing the relationship between time and intimacy.
+
+<br>
+
+```{r}
+# Compute fitted values for `model_2` and add them to our dataframe
+data_1$predicted_m2_random <- fitted(model_2)
+
+```
+
+```{r, fig.align="center", fig.cap="Figure 3. Fitted lines (`model_2`). Intimacy level for each participant predicted by time. Colours signify treatment (0 = no treatment; 1 = treatment)"}
+
+ggplot(data_1, aes(x = time, y = predicted_m2_random, group = id, colour = factor(treatment))) + 
+                            geom_line(size = 4, alpha = .15) +
+                            labs(x = "Time", y = "Intimacy", colour = "Treatment") +
+                            theme_minimal() +
+                            scale_color_manual(values=c(color, color4))
+                            
+          
+```
+
+<br>
+
+* #### e) What is the correlation between intercepts and time slopes? 
+
+<br>
+
+$r = -.44$
+
+<br>
+
+* #### Is it significant? 
+
+<br>
+
+Yes. $95$% confidence interval does not contain $0$ ($CI$ $[-.71, -.05]$)
+
+<br>
+
+* #### How would you interpret it?
+
+<br>
+
+The correlation is negative. This means that the bigger the value of the intercept (value of `intimacy` at `time == 0`) the lower the value of the slope (slower increase or decrease-instead-of-increase in `intimacy` over time).
+
+<br>
+
+* #### f) Create a plot showing the variability in intercepts and slopes (**1 EXTRA POINT**).
+
+<br>
+
+```{r}
+# Recreate the model using lmer() - sjPlot does not support models built using lme() 
+model_2_lmer <- lmer(intimacy ~ time + (1 + time | id), data_1)
+
+```
+
+```{r, fig.align="center", fig.cap="Figure 4. Variablilty of intercept [1] and slope [2] for `model_2`."}
+
+plot_model(model_2_lmer, 
+           type = "re", 
+           sort.est = "sort.all", 
+           grid = FALSE, 
+           free.scale = FALSE)
+
+```
+
+<br><br>
+
+## Model with time interaction (5 points)
+
+<br>
+
+* #### Fit a model with `time` as a random level-1 predictor, `treatment` as level-2 time-invariant predictor and `time × treatment` interaction. Respond the following questions.
+
+<br>
+
+```{r}
+model_3 <- lme(fixed = intimacy ~ time + treatment + time*treatment, random = ~ time | id, data = data_1)
+summary_3 <- summary(model_3)
+summary_3
+
+```
+
+<br>
+
+* #### a) Is this model better than the model with time as a random predictor? Provide the results of an appropriate test.
+
+<br>
+
+```{r}
+lrtest(model_2, model_3)
+
+```
+
+<br>
+
+`model_3` is not better than `model_2`. $\chi^2$ test is not significant.
+
+<br>
+
+* #### b) Is variability in slopes explained by study condition? How do you know it?
+
+<br>
+
+```{r}
+summary_3 <- summary(model_3)
+
+cat(" Expected difference in slopes between study conditions equals", summary_3$tTable['time:treatment', 'Value'],
+    "\n", 
+    "This difference is not significant at customary level of p = .05. P-value:", summary_3$tTable['time:treatment', 'p-value'], "\n", 
+    "Thus we can conclude, that variability in slopes is not being explained by study condition.")
+
+```
+
+<br>
+
+* #### c) Do treatment and waiting list group differ in terms of intercepts? How do you know it?
+
+<br>
+
+```{r}
+# Add reverse-coding `treatment`
+data_1$no_treatment <- recode(data_1$treatment,'0=1;1=0')
+
+# Fit the model with recoded `treatment`
+model_3_rcd <- lme(fixed = intimacy ~ time + no_treatment + time * no_treatment, random = ~ time | id, data = data_1)
+summary_3_rcd <- summary(model_3_rcd)
+summary_3_rcd
+
+summary_3_rcd
+
+```
+
+<br>
+```{r}
+# Compare estimates for `treatment` (`model_3`) and `no_treatment` (`model_3_rcd`) models
+cat("                         Estimate  Std. Error  DF          z value     Pr(>|z|) \n",
+    "No treatment         :", "\n", 
+    "          (Intercept):", formatC(summary_3$tTable[1, ], digits = 8, format = 'f'), "\n",
+    "Treatment            :", "\n", 
+    "          (Intercept):", formatC(summary_3_rcd$tTable[1, ], digits = 8, format = 'f'))
+```
+
+<br>
+
+Yes, they do differ, yet only slightly. 
+
+We know this because slope estimates for `treatment` and `no_treatment` differ (check the code output above).
+
+<br>
+
+<br>
+
+* #### e) Provide a publication-quality table summarizing all models you have just tested. You can find an example of such table in the revised Class 7 slides (**2 EXTRA POINTS**)
+
+<br>
+
+```{r, message = F}
+# Recreate all models using lmer() to use with tab_model()
+model_0_lmer <- lmer(intimacy ~ 1 + (1 | id), data_1)
+model_1_lmer <- lmer(intimacy ~ time + (1 | id), data_1)
+model_2_lmer <- lmer(intimacy ~ time + (1 + time | id), data_1)
+
+# `model-3_lmer` -> add comments below;
+model_3_lmer <- lmer(intimacy ~ time*treatment + (1 + time | id), data_1,
+                     control = lmerControl(optimizer ="Nelder_Mead")) 
+# Optimization method changed due to problems in convergence using default optimizer (bobyqa)
+# NOTE: There's no need to specify interaction terms separately - lmer() will incluse them automatically
+
+```
+
+
+```{r, results='asis'}
+# Build the comparison table
+tab_model(model_0_lmer, model_1_lmer, model_2_lmer, model_3_lmer, 
+          
+          show.ci      = FALSE,
+          show.dev     = TRUE,
+          show.r2      = FALSE,
+          show.ngroups = FALSE,
+          show.obs     = FALSE, 
+          p.style      = 'asterisk',
+          
+          pred.labels = c("Intercept", 
+                          "Time", 
+                          "Treatment", 
+                          "Time × Treatment"),
+          
+          dv.labels   = c("Model 0", 
+                          "Model 1", 
+                          "Model 2", 
+                          "Model 3"),
+          
+          title = "Table 1. Comparison of models: `model_0`, `model_1`, `model_2`, `model_3`")
+
+```
+
+<br><br>
+
+# Part 2
+
+<br>
+
+Data file: ESS8.3.sav
+
+<br>
+
+In the second part of Homework 3 you are going to analyse data from the 8th wave (2016) wave of the European Social Survey. The study was conducted in 23 European countries. The data set you received has a two-level structure: 
+
+**individuals** (level-1 units) are nested in **countries** (level-2 units). 
+
+Your task would be to check what factors explain boycotting certain products (as a form of protest behaviour) in the last 12 months.
+
+The dataset you received includes the following variables:
+
+* **cntry**: level-2 group identifier; respondent’s country level-2 variable; is gay marriage legal in a given country
+(2016)? 0 = no, 1 = yes
+
+* **gdp**: level-2 variable; country’s GDP per capita in 10 000$ (World Bank data)
+
+* **full_democracy**: level-2 variable; based on the Economist Democracy Index; is this country a full democracy? 0 = no, 1 = yes
+
+* **bctprd**: level-1 variable; boycotting certain products in the last 12 months 0 = no, 1 = yes
+
+* **lrscale**: level-1 variable; left – right self-placement (0 = left, 10 = right);
+
+<br>
+
+**HINT**:
+Do not forget about grand mean centering of continuous lrscale and gdp.
+
+<br><br>
+
+## Load and transform the data
+
+```{r}
+# Import the data
+data_2 <- read.spss("ESS8.3.sav", to.data.frame=TRUE)
+```
+
+```{r}
+# Mean-center the L-R scale and add to the dataframe
+data_2$lrscale_centered <- data_2$lrscale - mean(data_2$lrscale)
+
+# Check if # of obs per country is equal for all countries
+# data_2 %>% 
+#   group_by(cntry) %>% 
+#   tally() %>% 
+#   select(n) %>% 
+#   unique()                 # Needed to comment this code out as knitr() was not able to run it 
+
+```
+
+<br>
+
+Number of obs. per country is not identical for each country. We need to get mean $GDP$ for each country and then get a grand mean of each country's mean $GDP$ to get a reliable estimate of grand mean.
+
+<br>
+
+```{r}
+
+# Aggregate GDP and get per-country means
+gdp_aggregated <- aggregate(data_2$gdp, by=list(data_2$cntry), mean)
+
+# Center GDP (using grand mean of country means)
+data_2$gdp_centered <- data_2$gdp - mean(gdp_aggregated$x)
+
+```
+
+<br>
+
+## Visualize distributions
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 5. Histogram: L-R scale (centered)."}
+# Histogrm: ID with the socil mvmnt
+ggplot(data_2, aes(lrscale_centered)) + geom_histogram(bins=7, fill=color, alpha=.7) + 
+                           xlab('L-R scale') + 
+                           ylab('Count') + 
+                           theme_minimal()
+```
+
+```{r, fig.align="center", fig.cap="Figure 6. Histogram: GDP (centered)"}
+# Histogrm: ID with the socil mvmnt
+ggplot(data_2, aes(gdp_centered)) + geom_histogram(bins=7, fill=color, alpha=.7) + 
+                           xlab('GDP (centered)') + 
+                           ylab('Count') + 
+                           theme_minimal()
+```
+
+<br>
+
+## Null model (5 points)
+
+<br>
+
+* #### Fit a multilevel null model with bctprd as the DV and respond the following questions:
+
+<br>
+
+```{r}
+# Null model - using glmer, because DV is binomial
+model_20 <- glmer(bctprd ~ 1 + (1 | cntry), family = binomial, data = data_2)
+
+# Get summary 
+summary_20 <- summary(model_20)
+summary_20
+
+```
+
+<br>
+
+* #### a) What is the estimate for the sample intercept? Transform it into probability and interpret the value you obtained
+
+<br>
+
+```{r}
+model_20_gamma_00 <- summary_20$coefficients[1, 1]
+model_20_proba <- exp(model_20_gamma_00) / (1+exp(model_20_gamma_00))
+
+cat(" Estimate for sample intercept:", model_20_gamma_00, "\n",
+    "Probability of boycotting certain products in the last 12 months:", model_20_proba)
+
+```
+
+<br>
+
+Probability of boycotting certain products in the last 12 months in the whole sample equals $16$%.
+
+<br>
+
+* #### b) What proportion of variability in the outcome variable may be attributed to the country level of analysis?
+
+<br>
+
+```{r}
+# Get ICC
+# Level one variance (sigma^2) is CONSTANT for BINARY model and == 3.29
+ICC_20 <- 0.8717 / (3.29 + 0.8717)
+ICC_20
+
+```
+
+<br>
+
+Up to $21$% of variability in boycotting certain products in the last 12 months can be explained by `cntry`
+
+<br>
+
+* #### c) Is intercountry variability in intercepts significant? How do you know it? Provide the results of an appropriate test
+
+<br>
+
+```{r}
+# Build non-hierarchical model
+logistic_20 <- glm(bctprd ~ 1, data = data_2, family = binomial("logit"))
+
+# Compute log-likelihood ratio test for `model_20` vs `ligistic_20`
+lrtest_20 <- lrtest(logistic_20, model_20)
+
+```
+
+<br>
+
+Difference between deviances of null non-hierarchical null model (`logistic_20`) and null hierarchical model (`model_20`) is significant ($\Delta\chi^2 = 3657.8$; $df=1$; $p<.001$). Thus intercountry variability in intercepts is significant.
+
+<br><br>
+
+## Fixed effects model (6 points)
+
+<br>
+
+* #### Fit a fixed effects model with centered conservatism as a sole level-1 predictor.
+
+<br>
+
+```{r}
+model_21 <- glmer(bctprd ~ lrscale_centered + (1 | cntry), family = binomial, data = data_2)
+
+summary_21 <- summary(model_21)
+
+summary_21
+```
+
+<br>
+
+* #### a) Is the effect of conservatism significant? If so, how would you interpret it?
+
+<br>
+
+```{r}
+cat("p-value:", summary_21$coefficients[2, 4])
+
+```
+
+<br>
+
+Yes, effect of conservatism is significant ($\gamma_{10}=-.116$; $p<.001$).
+
+We can say that the higher the one’s conservatism, the lower the probability of boycotting certain products in the last 12 months.
+
+<br>
+
+* #### b) Is this model better than the null model? Provide the results of an appropriate test
+
+<br>
+
+```{r}
+lrtest(model_20, model_21)
+
+```
+
+<br>
+
+Yes, the `model_21` is better than `model_20` ($\chi^2 = 346.41$; $df=1$; $p<.001$).
+
+<br>
+
+* #### c) Create two plots: one presenting the relationship between conservatism and predicted log odds of boycotting certain products across different countries and the other showing the association between conservatism and probability of boycotting across different countries
+
+<br>
+
+```{r}
+# Get predicted probas for our training data
+predproba_21 <- fitted(model_21)         
+
+# Get predicted log odds
+predlogit_21 <- logit(predproba_21)
+
+# Create new DFs with `cntry`, `clrscale` and our DVs logits & probas
+logodds_21 <- unique(data.frame(cbind(predlogit     = predlogit_21, 
+                                      cntry         = data_2$cntry, 
+                                      lrscale_cntrd = data_2$lrscale_centered)))
+
+
+probas_21 <- unique(data.frame(cbind(predproba     = predproba_21,
+                                     cntry         = data_2$cntry, 
+                                     lrscale_cntrd = data_2$lrscale_centered)))
+
+
+```
+
+
+```{r, fig.align="center", fig.cap="Figure 6. Relationship between `L-R scale` and predicted log odds of boycotting certain products for `model_21`."}
+xyplot(predlogit ~ lrscale_cntrd, 
+       data = logodds_21, 
+       groups = cntry, 
+       type = c("p","l","g"),
+       col = color,
+       xlab = "L-R scale",
+       ylab = "Predicted log-odds",
+       par.settings = list(axis.line = list(col = 0)))
+
+```
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 7. Relationship between `L-R scale` and probability of boycotting certain products for `model_21`."}
+xyplot(predproba ~ lrscale_cntrd, 
+       data = probas_21, 
+       groups = cntry, 
+       type = c("p","l","g"),
+       col = color,
+       xlab = "L-R scale",
+       ylab = "Predicted probability",
+       par.settings = list(axis.line = list(col = 0)))
+
+```
+
+<br>
+
+## Random effects model (8 points)
+
+<br>
+
+* #### Fit a random effects model with centered conservatism as a sole level-1 predictor.
+
+<br>
+
+```{r}
+model_22 <- glmer(bctprd ~ lrscale_centered + (lrscale_centered | cntry), family = binomial, data = data_2)
+
+summary_22 <- summary(model_22)
+
+summary_22
+
+```
+
+<br>
+
+* #### a) Is this model better than the fixed effects model? Provide the results of an appropriate test and interpret it.
+
+<br>
+
+```{r}
+lrtest(model_21, model_22)
+
+```
+
+<br>
+
+Yes, the `model_22` is better than `model_21` ($\chi^2 = 107.94$; $df=2$; $p<.001$).
+
+Association between conservatism and boycotting products is different in different countries (we can expect non-parallel slopes).
+
+<br>
+
+* #### b) What is the estimated value of the intercept? Transform it into probability and interpret the value that you received.
+
+<br>
+
+```{r}
+model_22_gamma_00 <- summary_22$coefficients[1, 1]
+model_22_proba <- exp(model_22_gamma_00) / (1+exp(model_22_gamma_00))
+
+cat(" Estimate for the intercept:", model_22_gamma_00, "\n",
+    "Probability of boycotting certain products in the last 12 months:", model_22_proba)
+
+```
+
+<br>
+
+Probability of boycotting certain products in the last 12 months equals $16$% for the mean value of conservatism (`lrscale_centered`). 
+
+<br>
+
+* #### c) What is the estimated value of the slope? How would you interpret it?
+
+<br>
+
+```{r}
+model_22_slope <- summary_22$coefficients[2, 1]
+model_22_proba <- exp(model_22_slope) / (1+exp(model_22_slope))
+
+cat(" Estimate for the slope:", model_22_slope)
+
+```
+
+<br>
+
+Estimated value of the slope equals $-.11$. It means that the more conservative the person the less likely the person to boycott certain products in the last 12 months. 
+
+<br>
+
+* #### d) Visualize intercepts and slopes across different countries using sjPlot library
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 8. Variablilty of intercept [1] and slope [2] for `model_22`."}
+
+plot_model(model_22, 
+           type = "re", 
+           sort.est = "sort.all", 
+           grid = FALSE, 
+           free.scale = FALSE)
+
+```
+
+<br>
+
+* #### e) Create two plots: one presenting the relationship between conservatism and predicted log odds of boycotting certain products across different countries and the other showing the association between conservatism and probability of boycotting across different countries
+
+<br>
+
+```{r}
+# Get predicted probas for our training data
+predproba_22 <- fitted(model_22)         
+
+# Get predicted log odds
+predlogit_22 <- logit(predproba_22)
+
+# Create new DFs with `cntry`, `clrscale` and our DVs logits & probas
+logodds_22 <- unique(data.frame(cbind(predlogit     = predlogit_22, 
+                                      cntry         = data_2$cntry, 
+                                      lrscale_cntrd = data_2$lrscale_centered)))
+
+
+probas_22 <- unique(data.frame(cbind(predproba     = predproba_22,
+                                     cntry         = data_2$cntry, 
+                                     lrscale_cntrd = data_2$lrscale_centered)))
+
+
+```
+
+```{r, fig.align="center", fig.cap="Figure 9. Relationship between `L-R scale` and predicted log odds of boycotting certain products for `model_22`."}
+xyplot(predlogit ~ lrscale_cntrd, 
+       data = logodds_22, 
+       groups = cntry, 
+       type = c("p","l","g"),
+       col = color,
+       xlab = "L-R scale",
+       ylab = "Predicted log-odds",
+       par.settings = list(axis.line = list(col = 0)))
+
+```
+
+<br>
+
+```{r, fig.align="center", fig.cap="Figure 10. Relationship between `L-R scale` and probability of boycotting certain products for `model_22`."}
+xyplot(predproba ~ lrscale_cntrd, 
+       data = probas_22, 
+       groups = cntry, 
+       type = c("p","l","g"),
+       col = color,
+       xlab = "L-R scale",
+       ylab = "Predicted probability",
+       par.settings = list(axis.line = list(col = 0)))
+
+```
+
+<br>
+
+* #### f) Provide the estimated values of intercepts and slopes for Sweden and Poland (**1 EXTRA POINT**).
+
+<br>
+
+```{r}
+# Get random and fixed effects slopes and intercepts
+ranef(model_22)
+
+sweden_raw_22 <- c( 1.60766986, 0.0157693994)
+poland_raw_22 <- c(-1.02581918, 0.0381835911)
+
+fixd_eff_22 <- fixef(model_22)
+
+# Compute values
+cat("                         Intercept   Slope\n", 
+     "Estimates for Sweden:", fixd_eff_22 + sweden_raw_22, "\n",
+     "Estimates for Poland:", fixd_eff_22 + poland_raw_22)
+
+```
+
+<br>
+
+* #### g) Compute the predicted probability of boycotting certain products for a person who has extremely leftist views (`lrscore == 0`) and lives in Sweden. Next, compute such probability for an extreme leftist (`lrscore == 0`) living in Poland. Compare the probabilities and interpret the difference (**2 EXTRA POINTS**).
+
+```{r}
+# Get predictions
+sweden_pred_22 <- predict(model_22, 
+                          data.frame(lrscale_centered = 0 - mean(data_2$lrscale), cntry='Sweden'), 
+                          type = 'response')
+
+poland_pred_22 <- predict(model_22, 
+                          data.frame(lrscale_centered = 0 - mean(data_2$lrscale), cntry='Poland'),
+                          type = 'response')
+
+cat(" Probability of boycott for Swedish person with `lrscale == 0`:", sweden_pred_22, "\n",
+     "Probability of boycott for Polish  person with `lrscale == 0`:", poland_pred_22, "\n",
+     "Ratio:", sweden_pred_22 / poland_pred_22)
+
+```
+
+<br>
+
+It's $6.83$ times more probable that Swedish extereme leftist (`lrscale == 0`) boycotted certain products in the last 12 months than Polish extereme leftist (`lrscale == 0`) did so.
+
+<br><br>
+
+## Cross-level interaction (10 points)
+
+<br>
+
+* #### Fit a model including centered conservatism as a random level-1 predictor, full_democracy as a level-2 predictor and centered conservatism × full_democracy crosslevel interaction.
+
+<br>
+
+```{r}
+model_23 <- glmer(bctprd ~ lrscale_centered * full_democracy + (lrscale_centered | cntry), 
+                  family = binomial, 
+                  data = data_2)
+
+summary_23 <- summary(model_23)
+
+summary_23
+
+```
+
+<br>
+
+* #### a) Is this model better than the random effects model? Provide the results of an appropriate test
+
+<br>
+
+```{r}
+lrtest(model_22, model_23)
+
+```
+
+<br>
+
+Yes, the `model_23` is better than `model_22` ($\Delta\chi^2 = 23.207$; $df=2$; $p<.001$).
+
+<br>
+
+* #### b) Is the effect of conservatism on boycotting certain products different in full democracies and not fully democratic countries? How do you know it?
+
+<br>
+
+```{r}
+# Add reverse-coding `full_democracy`
+data_2$no_democracy<-recode(data_2$full_democracy,'0=1;1=0')
+
+# Fit the model with recoded `full_democracy`
+model_23a <- glmer(bctprd ~ lrscale_centered * no_democracy + (lrscale_centered | cntry), 
+                  family = binomial, 
+                  data   = data_2)
+
+summary_23a <- summary(model_23a)
+
+summary_23a
+
+```
+
+<br>
+```{r}
+# Compare estimates for `full_democracy` (`model_23`) and `no_democracy` (`model_23a`) models
+cat(" Model                   Estimate    Std. Error  z value     Pr(>|z|) \n",
+    "Non-full democracies :", "\n", 
+    "              (Slope):", formatC(summary_23$coefficients[2, ], digits = 8, format = 'f'), "\n",
+    "Full democracies     :", "\n", 
+    "              (Slope):", formatC(summary_23a$coefficients[2, ], digits = 8, format = 'f'))
+```
+
+<br>
+
+Yes, the effect is different for fully democratic and not fully democratic coutries. 
+
+We know this because slope estimates for `full_democracy` and `no_democracy` differ (check the code output above).
+
+<br>
+
+* #### c) What is the estimated value of the intercept? How would you interpret it?
+
+<br>
+
+```{r}
+# I am assuming that the question is related to the basic model (`model_23`)
+summary_23$coefficients[1, ]
+
+```
+
+<br>
+
+The value of the intercept equals to $-2.30$. It's the value of log-odds of boycotting certain prod. in the last 12 months when `full_demoracy == 0` and `lrscale_centered == 0`.
+
+<br>
+
+* #### d) What is the estimated value of the slope? How would you interpret it?
+
+<br>
+
+```{r}
+# I am assuming that the question is related to the basic model (`model_23`)
+summary_23$coefficients[2, ]
+
+```
+
+<br>
+
+The value of the slope equals to $-0.05$. It means that the more conservative the person is the less likely this person is to boycott certain products in the last 12 months.
+
+<br>
+
+* #### e) Provide the estimates (as well as standard errors and p-values) of the intercepts and slopes in full democracies and countries that are not full democracies.
+
+<br>
+
+```{r}
+cat(" Model                   Estimate    Std. Error  z value     Pr(>|z|) \n",
+    "Non-full democracies :", "\n", 
+    "          (Intercept):", formatC(summary_23$coefficients[1, ], digits = 8, format = 'f'), "\n",
+    "              (Slope):", formatC(summary_23$coefficients[2, ], digits = 8, format = 'f'), "\n",
+    "Full democracies     :", "\n", 
+    "          (Intercept):", formatC(summary_23a$coefficients[1, ], digits = 8, format = 'f'), "\n",
+    "              (Slope):", formatC(summary_23a$coefficients[2, ], digits = 8, format = 'f'))
+
+
+```
+
+<br>
+
+* #### f) Visualize the effects of conservatism on the outcome variable in full democracies and countries that are not full democracies.
+
+<br>
+
+```{r}
+# Prepare data 
+ef_23 <- effect(term    = "lrscale_centered * full_democracy", 
+                mod     = model_23, 
+                xlevels = list(lrscale_centered = seq(-5, 5, 1), 
+                               full_democracy   = c(0,1)))
+
+ef_df_23 <- as.data.frame(ef_23) 
+
+# Transform `full_democracy` to factor (for viz)
+ef_df_23$full_democracy <- as.factor(ef_df_23$full_democracy)
+
+```
+
+```{r, fig.align="center", fig.cap="Figure 11. Cross-level interaction between conservatism (`L-R scale (centered)`) and `full_democracy` (0 = non-full democracy; 1 = full democracy)."}
+ggplot(ef_df_23, 
+       aes(x     = lrscale_centered, 
+           y     = fit, 
+           color = full_democracy, 
+           group = full_democracy)) + 
+  geom_line(size = 1, alpha = .5) +
+  geom_ribbon(aes(ymin = lower,
+                  ymax = upper,
+                  fill = full_democracy),
+              alpha = .3) + 
+  labs(x     = "Conservatism (centered)", 
+       y     = "Probability of boycotting certain products in the last 12 months",
+       fill  = "Full democracy",
+       color = "Full democracy") + 
+  theme_minimal() +
+  theme(text=element_text(size=9)) +
+  scale_color_manual(values=c(color, color4)) +
+  scale_fill_manual(values=c(color, color4)) 
+```
+
+
+<br>
+
+* #### g) Compute the predicted probability of boycotting certain products for a person who has extremely conservative views (`lrscore == 10`) and lives in a fully democratic country. Next, compute such a probability for an extreme conservatist (`lrscore == 10`) living in a country that is not a full democracy. Compare the probabilities and interpret the difference (**2 EXTRA POINTS**).
+
+<br>
+
+```{r}
+# Get predictions
+fulldem_pred_23 <- predict(model_23, 
+                          data.frame(lrscale_centered = 10 - mean(data_2$lrscale), 
+                                     full_democracy   = 1), 
+                          type    = 'response',
+                          re.form = ~0)
+
+nflldem_pred_23 <- predict(model_23, 
+                          data.frame(lrscale_centered = 10 - mean(data_2$lrscale), 
+                                     full_democracy   = 0),
+                          type    = 'response',
+                          re.form = ~0)
+
+cat(" Probability of boycott for a person from     a fully democratic country with `lrscale == 10`:", fulldem_pred_23, "\n",
+     "Probability of boycott for a person from not a fully democratic country with `lrscale == 10`:", nflldem_pred_23, "\n",
+     "Ratio:", fulldem_pred_23 / nflldem_pred_23)
+
+```
+
+<br>
+
+It's $2.03$ times more probable that an extereme conservatist (`lrscale == 10`) from a fully democratic country boycotted certain products in the last 12 months than that an extereme conservatist (`lrscale == 10`) from a non-fully democratic country did so.
+
+
+<br><br>
+
+## Model with a covariate (4 points)
+
+<br>
+
+* #### Fit a model including centered conservatism as a random level-1 predictor, full_democracy as a level-2 predictor, centered gdp as a level-2 covariate, centered conservatism × full_democracy cross-level interaction, and centered conservatism × centered gdp cross-level interaction.
+
+<br>
+
+```{r}
+model_24 <- glmer(bctprd ~ lrscale_centered * full_democracy + lrscale_centered * gdp_centered + (lrscale_centered | cntry), 
+                  family = binomial, 
+                  data = data_2)
+
+summary_24 <- summary(model_24)
+
+summary_24
+
+```
+
+<br>
+
+* #### a) Is this model better than the cross-level interaction model? Provide the results of an appropriate test
+
+<br>
+
+```{r}
+lrtest(model_23, model_24)
+
+```
+
+<br>
+
+Yes, the `model_24` is better than `model_23` ($\Delta\chi^2 = 7.632$; $df=2$; $p=.02$).
+
+<br>
+
+* #### b) Is centered conservatism × full_democracy cross-level interaction still significant? What does it mean?
+
+<br>
+
+```{r}
+summary_24$coefficients[5, ]
+
+```
+
+<br>
+
+No, it's not significant any more. We can interpret it as a result of mediation of `gdp_centered`: 
+
+`gdp_centered` mediated the relationship between the interaction `lrscale_centered * full_democracy` and our DV.
+
+<br>
+
+## Table (2 points)
+
+<br>
+
+* #### Provide a publication-quality table summarizing all models you have just tested. You can find an example of such table in Class 8 slides.
+
+
+<br>
+
+```{r, results='asis'}
+# The below code returned bullshit results -> Table 2 in additional file!
+tab_model(model_20, model_21, model_22, model_23, model_24,
+
+          show.ci      = FALSE,
+          show.dev     = TRUE,
+          show.r2      = FALSE,
+          show.ngroups = FALSE,
+          show.obs     = FALSE,
+          p.style      = 'asterisk',
+
+          pred.labels = c("Intercept",
+                          "Conservatism",
+                          "Full democracy",
+                          "Conservatism x full dem.",
+                          "GDP",
+                          "Conservatism x GDP"),
+
+          dv.labels   = c("Model 0",
+                          "Model 1",
+                          "Model 2",
+                          "Model 3",
+                          "Model 4"),
+          
+          transform   = NULL,
+
+          title = "Table 2. Comparison of models: `model_20`, `model_21`, `model_22`, `model_23`, `model_24`")
+
+
+```
+
+
+<br>
+
+
